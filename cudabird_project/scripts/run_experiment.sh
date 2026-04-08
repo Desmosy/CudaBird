@@ -28,11 +28,6 @@ echo "********************************"
 # Run the main application
 ./build/cudabird "$@"
 
-# --- Future: uncomment when tests are enabled in CMakeLists.txt ---
-# echo ""
-# echo "********************************"
-# echo "** Running Unit Tests         **"
-# echo "********************************"
 # ./build/test_game
 # ./build/test_network
 # ./build/test_evolution
