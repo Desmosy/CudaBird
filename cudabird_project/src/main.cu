@@ -18,6 +18,7 @@
 namespace {
 
 struct RunOptions {
+    int population_size;
     int generations;
     int max_ticks;
     int report_every;
@@ -25,7 +26,7 @@ struct RunOptions {
 };
 
 void print_usage(const char* program_name) {
-    printf("Usage: %s [generation_count] [--generations N] [--ticks N] "
+    printf("Usage: %s [generation_count] [--population N] [--generations N] [--ticks N] "
            "[--report-every N] [--seed N]\n",
            program_name);
 }
@@ -42,6 +43,7 @@ int parse_positive_int(const char* value, const char* flag_name) {
 
 RunOptions parse_run_options(int argc, char** argv) {
     RunOptions options = {
+        POPULATION_SIZE,
         MAX_GENERATIONS,
         MAX_TICKS_PER_GENERATION,
         DEFAULT_GENERATION_REPORT_INTERVAL,
@@ -62,6 +64,15 @@ RunOptions parse_run_options(int argc, char** argv) {
                 exit(EXIT_FAILURE);
             }
             options.generations = parse_positive_int(argv[++arg_idx], "--generations");
+            continue;
+        }
+
+        if (strcmp(arg, "--population") == 0) {
+            if (arg_idx + 1 >= argc) {
+                fprintf(stderr, "Missing value for --population\n");
+                exit(EXIT_FAILURE);
+            }
+            options.population_size = parse_positive_int(argv[++arg_idx], "--population");
             continue;
         }
 
@@ -111,7 +122,7 @@ int main(int argc, char** argv) {
 
     printf("CudaBird training run\n");
     printf("Population: %d | generations: %d | max ticks/gen: %d | report every: %d | seed: %llu\n",
-           POPULATION_SIZE,
+           options.population_size,
            options.generations,
            options.max_ticks,
            options.report_every,
@@ -124,18 +135,18 @@ int main(int argc, char** argv) {
     int* d_ranked_indices = nullptr;
 
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_games),
-                          sizeof(GameState) * POPULATION_SIZE));
+                          sizeof(GameState) * options.population_size));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_population),
-                          sizeof(NetworkWeights) * POPULATION_SIZE));
+                          sizeof(NetworkWeights) * options.population_size));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_next_population),
-                          sizeof(NetworkWeights) * POPULATION_SIZE));
+                          sizeof(NetworkWeights) * options.population_size));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_rng_states),
-                          sizeof(curandState) * POPULATION_SIZE));
+                          sizeof(curandState) * options.population_size));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_ranked_indices),
-                          sizeof(int) * POPULATION_SIZE));
+                          sizeof(int) * options.population_size));
 
-    initialize_curand_states(d_rng_states, POPULATION_SIZE, options.seed);
-    initialize_population(d_population, d_rng_states, POPULATION_SIZE);
+    initialize_curand_states(d_rng_states, options.population_size, options.seed);
+    initialize_population(d_population, d_rng_states, options.population_size);
 
     Renderer renderer("training_log.csv");
     GenerationSummary best_run = {};
@@ -143,16 +154,19 @@ int main(int argc, char** argv) {
     best_run.best_fitness = -1.0f;
 
     for (int generation = 0; generation < options.generations; ++generation) {
-        reset_games(d_games, d_rng_states, POPULATION_SIZE);
+        reset_games(d_games, d_rng_states, options.population_size);
         simulate_generation(d_games,
                             d_population,
                             d_rng_states,
-                            POPULATION_SIZE,
+                            options.population_size,
                             options.max_ticks);
 
         std::vector<int> ranked_indices;
         const GenerationSummary summary =
-            collect_generation_summary(d_games, POPULATION_SIZE, generation, &ranked_indices);
+            collect_generation_summary(d_games,
+                                       options.population_size,
+                                       generation,
+                                       &ranked_indices);
 
         if (summary.best_fitness > best_run.best_fitness) {
             best_run = summary;
@@ -170,13 +184,13 @@ int main(int argc, char** argv) {
         if (generation + 1 < options.generations) {
             CUDA_CHECK(cudaMemcpy(d_ranked_indices,
                                   ranked_indices.data(),
-                                  sizeof(int) * POPULATION_SIZE,
+                                  sizeof(int) * options.population_size,
                                   cudaMemcpyHostToDevice));
             evolve_population(d_next_population,
                               d_population,
                               d_ranked_indices,
                               d_rng_states,
-                              POPULATION_SIZE);
+                              options.population_size);
             std::swap(d_population, d_next_population);
         }
     }
