@@ -14,8 +14,10 @@ class Renderer {
     ~Renderer();
 
     void render_generation(const GenerationSummary& summary);
+    void save_best_network(const NetworkWeights& network, const GenerationSummary& summary);
 
   private:
+    std::string checkpoint_dir_;
     std::ofstream log_file_;
 };
 

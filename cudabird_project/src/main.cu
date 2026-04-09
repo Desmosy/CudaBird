@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
 
     Renderer renderer("training_log.csv");
     GenerationSummary best_run = {};
+    NetworkWeights best_network = {};
     best_run.best_fitness = -1.0f;
 
     for (int generation = 0; generation < requested_generations; ++generation) {
@@ -66,6 +67,11 @@ int main(int argc, char** argv) {
 
         if (summary.best_fitness > best_run.best_fitness) {
             best_run = summary;
+            CUDA_CHECK(cudaMemcpy(&best_network,
+                                  d_population + summary.best_index,
+                                  sizeof(NetworkWeights),
+                                  cudaMemcpyDeviceToHost));
+            renderer.save_best_network(best_network, summary);
         }
 
         if (generation % DEFAULT_GENERATION_REPORT_INTERVAL == 0) {
