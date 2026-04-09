@@ -1,23 +1,44 @@
 #ifndef CUDABIRD_CONFIG_H
 #define CUDABIRD_CONFIG_H
-#define POPULATION_SIZE     4096    // Number of birds (games) per generation
-#define MAX_GENERATIONS     500     // Max evolutionary generations
-#define MAX_PIPES           10      // Max pipes on screen at once
-#define GAME_WIDTH          288     // Virtual game width
-#define GAME_HEIGHT         512     // Virtual game height
-#define PIPE_GAP            100     // Vertical gap between top/bottom pipe
-#define PIPE_SPEED          2.0f    // Horizontal speed of pipes
-#define PIPE_SPACING        200     // Horizontal distance between pipes
-#define GRAVITY             0.5f    // Downward acceleration
-#define FLAP_STRENGTH      -8.0f   // Upward velocity on flap
-#define BIRD_RADIUS         12.0f   // Collision radius of bird
-#define INPUT_SIZE          4       // Inputs: bird_y, bird_velocity, pipe_dist_x, pipe_gap_y
-#define HIDDEN_SIZE         8       // Hidden layer neurons
-#define OUTPUT_SIZE         1       // Output: flap probability
-#define FLAP_THRESHOLD      0.5f   // If output > threshold, bird flaps
-#define MUTATION_RATE       0.1f    // Probability of mutating a weight
-#define MUTATION_SCALE      0.3f    // Stddev of Gaussian mutation noise
-#define ELITE_COUNT         64      // Top birds copied unchanged
-#define TOURNAMENT_SIZE     4       // Tournament selection size
-#define BLOCK_SIZE          256     // Threads per block for most kernels
+
+#define POPULATION_SIZE             4096
+#define MAX_GENERATIONS             500
+#define MAX_TICKS_PER_GENERATION    2048
+#define MAX_PIPES                   10
+
+#define GAME_WIDTH                  288.0f
+#define GAME_HEIGHT                 512.0f
+#define BIRD_X                      72.0f
+#define BIRD_START_Y                (GAME_HEIGHT * 0.5f)
+#define BIRD_RADIUS                 12.0f
+
+#define PIPE_WIDTH                  52.0f
+#define PIPE_GAP                    110.0f
+#define PIPE_SPEED                  2.0f
+#define PIPE_SPACING                180.0f
+#define INITIAL_PIPE_OFFSET         120.0f
+#define PIPE_MARGIN                 56.0f
+
+#define GRAVITY                     0.5f
+#define FLAP_STRENGTH               -8.0f
+#define FLAP_THRESHOLD              0.5f
+
+#define INPUT_SIZE                  4
+#define HIDDEN_SIZE                 8
+#define OUTPUT_SIZE                 1
+
+#define INPUT_TO_HIDDEN_PARAM_COUNT (INPUT_SIZE * HIDDEN_SIZE)
+#define HIDDEN_BIAS_PARAM_COUNT     (HIDDEN_SIZE)
+#define HIDDEN_TO_OUTPUT_PARAM_COUNT (HIDDEN_SIZE * OUTPUT_SIZE)
+#define OUTPUT_BIAS_PARAM_COUNT     (OUTPUT_SIZE)
+#define NETWORK_PARAM_COUNT         (INPUT_TO_HIDDEN_PARAM_COUNT + HIDDEN_BIAS_PARAM_COUNT + HIDDEN_TO_OUTPUT_PARAM_COUNT + OUTPUT_BIAS_PARAM_COUNT)
+
+#define MUTATION_RATE               0.1f
+#define MUTATION_SCALE              0.3f
+#define ELITE_COUNT                 64
+#define PARENT_POOL_SIZE            256
+
+#define BLOCK_SIZE                  256
+#define DEFAULT_GENERATION_REPORT_INTERVAL 1
+
 #endif // CUDABIRD_CONFIG_H
