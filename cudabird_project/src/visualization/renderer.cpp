@@ -3,7 +3,6 @@
 #include <cerrno>
 #include <cstdio>
 #include <fstream>
-#include <random>
 #include <string>
 #include <sys/stat.h>
 
@@ -25,137 +24,6 @@ void ensure_directory_exists(const std::string& path) {
     }
 
     std::fprintf(stderr, "Warning: unable to create checkpoint directory '%s'\n", path.c_str());
-}
-
-float replay_random_gap_center(std::mt19937* rng) {
-    const float min_gap_center = PIPE_MARGIN + (PIPE_GAP * 0.5f);
-    const float max_gap_center = GAME_HEIGHT - PIPE_MARGIN - (PIPE_GAP * 0.5f);
-    std::uniform_real_distribution<float> distribution(min_gap_center, max_gap_center);
-    return distribution(*rng);
-}
-
-int replay_find_next_pipe_index(const GameState& game_state) {
-    int best_index = 0;
-    float best_x = 1.0e30f;
-
-    for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
-        const float pipe_trailing_edge = game_state.pipes[pipe_idx].x + PIPE_WIDTH;
-        if (pipe_trailing_edge >= BIRD_X && game_state.pipes[pipe_idx].x < best_x) {
-            best_index = pipe_idx;
-            best_x = game_state.pipes[pipe_idx].x;
-        }
-    }
-
-    return best_index;
-}
-
-void initialize_replay_game(GameState* game_state, std::mt19937* rng) {
-    *game_state = {};
-    game_state->bird_y = BIRD_START_Y;
-    game_state->bird_velocity = 0.0f;
-    game_state->fitness = 0.0f;
-    game_state->alive = 1;
-    game_state->score = 0;
-    game_state->ticks_alive = 0;
-    game_state->next_pipe_index = 0;
-
-    for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
-        game_state->pipes[pipe_idx].x =
-            GAME_WIDTH + INITIAL_PIPE_OFFSET + static_cast<float>(pipe_idx) * PIPE_SPACING;
-        game_state->pipes[pipe_idx].gap_center_y = replay_random_gap_center(rng);
-        game_state->pipes[pipe_idx].passed = 0;
-    }
-}
-
-void advance_replay_pipes(GameState* game_state, std::mt19937* rng) {
-    float rightmost_x = game_state->pipes[0].x;
-
-    for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
-        PipeState* pipe = &game_state->pipes[pipe_idx];
-        pipe->x -= PIPE_SPEED;
-
-        if (pipe->x > rightmost_x) {
-            rightmost_x = pipe->x;
-        }
-
-        if (!pipe->passed && pipe->x + PIPE_WIDTH < BIRD_X) {
-            pipe->passed = 1;
-            game_state->score += 1;
-        }
-    }
-
-    for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
-        PipeState* pipe = &game_state->pipes[pipe_idx];
-        if (pipe->x + PIPE_WIDTH >= 0.0f) {
-            continue;
-        }
-
-        pipe->x = rightmost_x + PIPE_SPACING;
-        pipe->gap_center_y = replay_random_gap_center(rng);
-        pipe->passed = 0;
-        rightmost_x = pipe->x;
-    }
-}
-
-bool replay_collides_with_pipe(const GameState& game_state) {
-    for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
-        const PipeState& pipe = game_state.pipes[pipe_idx];
-        const float pipe_left = pipe.x;
-        const float pipe_right = pipe.x + PIPE_WIDTH;
-        const bool overlaps_horizontally =
-            (BIRD_X + BIRD_RADIUS) >= pipe_left && (BIRD_X - BIRD_RADIUS) <= pipe_right;
-
-        if (!overlaps_horizontally) {
-            continue;
-        }
-
-        const float gap_top = pipe.gap_center_y - (PIPE_GAP * 0.5f);
-        const float gap_bottom = pipe.gap_center_y + (PIPE_GAP * 0.5f);
-        if ((game_state.bird_y - BIRD_RADIUS) < gap_top ||
-            (game_state.bird_y + BIRD_RADIUS) > gap_bottom) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void simulate_replay_tick(GameState* game_state,
-                          const NetworkWeights& network,
-                          std::mt19937* rng,
-                          float* flap_probability) {
-    if (!game_state->alive) {
-        return;
-    }
-
-    game_state->next_pipe_index = replay_find_next_pipe_index(*game_state);
-    const PipeState& next_pipe = game_state->pipes[game_state->next_pipe_index];
-
-    float inputs[INPUT_SIZE];
-    inputs[0] = (game_state->bird_y / GAME_HEIGHT) * 2.0f - 1.0f;
-    inputs[1] = game_state->bird_velocity / 10.0f;
-    inputs[2] = ((next_pipe.x - BIRD_X) / GAME_WIDTH) * 2.0f - 1.0f;
-    inputs[3] = (next_pipe.gap_center_y / GAME_HEIGHT) * 2.0f - 1.0f;
-
-    *flap_probability = run_network(network, inputs);
-    if (*flap_probability > FLAP_THRESHOLD) {
-        game_state->bird_velocity = FLAP_STRENGTH;
-    }
-
-    game_state->bird_velocity += GRAVITY;
-    game_state->bird_y += game_state->bird_velocity;
-    advance_replay_pipes(game_state, rng);
-
-    game_state->ticks_alive += 1;
-    game_state->fitness = static_cast<float>(game_state->ticks_alive) +
-                          static_cast<float>(game_state->score) * 250.0f;
-
-    const bool out_of_bounds =
-        (game_state->bird_y - BIRD_RADIUS) < 0.0f ||
-        (game_state->bird_y + BIRD_RADIUS) > GAME_HEIGHT;
-    if (out_of_bounds || replay_collides_with_pipe(*game_state)) {
-        game_state->alive = 0;
-    }
 }
 
 std::string build_generation_checkpoint_path(const std::string& directory, int generation) {
@@ -229,12 +97,12 @@ void draw_pipe(cv::Mat* frame, const PipeState& pipe, int scale) {
 }
 
 void draw_replay_frame(cv::Mat* frame,
-                       const GameState& game_state,
+                       const ReplayFrame& replay_frame,
                        const GenerationSummary& summary,
                        int tick,
                        int max_ticks,
-                       float flap_probability,
                        int scale) {
+    const GameState& game_state = replay_frame.game_state;
     frame->setTo(cv::Scalar(248, 221, 148));
 
     for (int pipe_idx = 0; pipe_idx < MAX_PIPES; ++pipe_idx) {
@@ -265,7 +133,7 @@ void draw_replay_frame(cv::Mat* frame,
     const double font_scale = 0.38 * static_cast<double>(scale);
     const int line_height = 24 * scale;
     char flap_text[32];
-    std::snprintf(flap_text, sizeof(flap_text), "%.3f", flap_probability);
+    std::snprintf(flap_text, sizeof(flap_text), "%.3f", replay_frame.flap_probability);
 
     cv::putText(*frame,
                 "Best bird replay",
@@ -373,17 +241,22 @@ void Renderer::save_best_network(const NetworkWeights& network,
     }
 }
 
-void Renderer::render_best_replay(const NetworkWeights& network,
+void Renderer::render_best_replay(const std::vector<ReplayFrame>& frames,
                                   const GenerationSummary& summary,
                                   const ReplaySettings& settings) {
     ensure_directory_exists(checkpoint_dir_);
 
 #ifndef CUDABIRD_HAVE_OPENCV
-    (void)network;
+    (void)frames;
     (void)summary;
     (void)settings;
     std::fprintf(stderr, "Replay rendering skipped because OpenCV support is unavailable\n");
 #else
+    if (frames.empty()) {
+        std::fprintf(stderr, "Replay rendering skipped because no frames were captured\n");
+        return;
+    }
+
     const int frame_width = scaled_pixels(GAME_WIDTH, settings.scale);
     const int frame_height = scaled_pixels(GAME_HEIGHT, settings.scale);
     const std::string latest_path = checkpoint_dir_ + "/best_replay_latest.avi";
@@ -410,38 +283,20 @@ void Renderer::render_best_replay(const NetworkWeights& network,
         }
     };
 
-    std::mt19937 replay_rng(static_cast<std::mt19937::result_type>(settings.seed));
-    GameState game_state = {};
-    initialize_replay_game(&game_state, &replay_rng);
-
     cv::Mat frame(frame_height, frame_width, CV_8UC3);
-    float flap_probability = 0.0f;
-    int rendered_ticks = 0;
+    const int max_ticks = settings.max_ticks > 0 ? settings.max_ticks : static_cast<int>(frames.size() - 1);
 
-    draw_replay_frame(&frame,
-                      game_state,
-                      summary,
-                      rendered_ticks,
-                      settings.max_ticks,
-                      flap_probability,
-                      settings.scale);
-    write_frame(frame);
-
-    while (rendered_ticks < settings.max_ticks && game_state.alive) {
-        simulate_replay_tick(&game_state, network, &replay_rng, &flap_probability);
-        rendered_ticks += 1;
-
+    for (size_t frame_idx = 0; frame_idx < frames.size(); ++frame_idx) {
         draw_replay_frame(&frame,
-                          game_state,
+                          frames[frame_idx],
                           summary,
-                          rendered_ticks,
-                          settings.max_ticks,
-                          flap_probability,
+                          static_cast<int>(frame_idx),
+                          max_ticks,
                           settings.scale);
         write_frame(frame);
     }
 
-    for (int hold_frame = 0; hold_frame < DEFAULT_REPLAY_HOLD_FRAMES; ++hold_frame) {
+    for (int hold_frame = 0; hold_frame < settings.hold_frames; ++hold_frame) {
         write_frame(frame);
     }
 

@@ -123,9 +123,7 @@ int main(int argc, char** argv) {
         options.max_ticks,
         DEFAULT_REPLAY_FPS,
         DEFAULT_REPLAY_SCALE,
-        options.seed ^
-            (static_cast<unsigned long long>(options.generations + options.population_size) *
-             1315423911ULL)
+        DEFAULT_REPLAY_HOLD_FRAMES
     };
 
     printf("CudaBird training run\n");
@@ -159,10 +157,20 @@ int main(int argc, char** argv) {
     Renderer renderer("training_log.csv");
     GenerationSummary best_run = {};
     NetworkWeights best_network = {};
+    std::vector<GameState> generation_start_games(options.population_size);
+    std::vector<curandState> generation_start_rng_states(options.population_size);
     best_run.best_fitness = -1.0f;
 
     for (int generation = 0; generation < options.generations; ++generation) {
         reset_games(d_games, d_rng_states, options.population_size);
+        CUDA_CHECK(cudaMemcpy(generation_start_games.data(),
+                              d_games,
+                              sizeof(GameState) * options.population_size,
+                              cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(generation_start_rng_states.data(),
+                              d_rng_states,
+                              sizeof(curandState) * options.population_size,
+                              cudaMemcpyDeviceToHost));
         simulate_generation(d_games,
                             d_population,
                             d_rng_states,
@@ -176,6 +184,10 @@ int main(int argc, char** argv) {
                                        generation,
                                        &ranked_indices);
 
+        if (generation % options.report_every == 0) {
+            renderer.render_generation(summary);
+        }
+
         if (summary.best_fitness > best_run.best_fitness) {
             best_run = summary;
             CUDA_CHECK(cudaMemcpy(&best_network,
@@ -183,10 +195,26 @@ int main(int argc, char** argv) {
                                   sizeof(NetworkWeights),
                                   cudaMemcpyDeviceToHost));
             renderer.save_best_network(best_network, summary);
-        }
 
-        if (generation % options.report_every == 0) {
-            renderer.render_generation(summary);
+            std::vector<ReplayFrame> replay_frames(static_cast<size_t>(options.max_ticks + 1));
+            int replay_frame_count = 0;
+            capture_replay_frames(generation_start_games[summary.best_index],
+                                  generation_start_rng_states[summary.best_index],
+                                  best_network,
+                                  options.max_ticks,
+                                  replay_frames.data(),
+                                  &replay_frame_count);
+            replay_frames.resize(static_cast<size_t>(replay_frame_count));
+            if (!replay_frames.empty() &&
+                replay_frames.back().game_state.score != summary.best_score) {
+                fprintf(stderr,
+                        "Warning: replay score mismatch for generation %d "
+                        "(expected %d, got %d)\n",
+                        summary.generation,
+                        summary.best_score,
+                        replay_frames.back().game_state.score);
+            }
+            renderer.render_best_replay(replay_frames, summary, replay_settings);
         }
 
         if (generation + 1 < options.generations) {
@@ -207,7 +235,6 @@ int main(int argc, char** argv) {
            best_run.generation,
            best_run.best_fitness,
            best_run.best_score);
-    renderer.render_best_replay(best_network, best_run, replay_settings);
 
     CUDA_CHECK(cudaFree(d_ranked_indices));
     CUDA_CHECK(cudaFree(d_rng_states));

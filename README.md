@@ -13,7 +13,7 @@ The project now has a runnable end-to-end training slice:
 - Mutated offspring are generated directly on the GPU.
 - Training metrics are logged each generation.
 - The current best network is checkpointed to disk.
-- The final champion of a run is rendered to a replay video.
+- The final champion of a run is exported as a replay video of the evaluated winner episode.
 
 ## What Has Been Accomplished
 
@@ -54,7 +54,7 @@ The project now has a runnable end-to-end training slice:
 - Added console generation summaries during training.
 - Added `training_log.csv` output.
 - Added checkpoint files for the current best network under `cudabird_project/outputs/`.
-- Added OpenCV-based replay export for the best bird as `.avi` video.
+- Added OpenCV-based replay export for the actual winning bird episode as `.avi` video.
 
 ## Verified Working
 
