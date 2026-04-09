@@ -119,6 +119,14 @@ RunOptions parse_run_options(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     const RunOptions options = parse_run_options(argc, argv);
+    const ReplaySettings replay_settings = {
+        options.max_ticks,
+        DEFAULT_REPLAY_FPS,
+        DEFAULT_REPLAY_SCALE,
+        options.seed ^
+            (static_cast<unsigned long long>(options.generations + options.population_size) *
+             1315423911ULL)
+    };
 
     printf("CudaBird training run\n");
     printf("Population: %d | generations: %d | max ticks/gen: %d | report every: %d | seed: %llu\n",
@@ -199,6 +207,7 @@ int main(int argc, char** argv) {
            best_run.generation,
            best_run.best_fitness,
            best_run.best_score);
+    renderer.render_best_replay(best_network, best_run, replay_settings);
 
     CUDA_CHECK(cudaFree(d_ranked_indices));
     CUDA_CHECK(cudaFree(d_rng_states));

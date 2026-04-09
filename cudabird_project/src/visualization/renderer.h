@@ -8,6 +8,13 @@
 #include <fstream>
 #include <string>
 
+struct ReplaySettings {
+    int max_ticks;
+    int fps;
+    int scale;
+    unsigned long long seed;
+};
+
 class Renderer {
   public:
     explicit Renderer(const std::string& log_path);
@@ -15,6 +22,9 @@ class Renderer {
 
     void render_generation(const GenerationSummary& summary);
     void save_best_network(const NetworkWeights& network, const GenerationSummary& summary);
+    void render_best_replay(const NetworkWeights& network,
+                            const GenerationSummary& summary,
+                            const ReplaySettings& settings);
 
   private:
     std::string checkpoint_dir_;

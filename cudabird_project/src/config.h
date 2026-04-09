@@ -40,5 +40,8 @@
 
 #define BLOCK_SIZE                  256
 #define DEFAULT_GENERATION_REPORT_INTERVAL 1
+#define DEFAULT_REPLAY_FPS          30
+#define DEFAULT_REPLAY_SCALE        2
+#define DEFAULT_REPLAY_HOLD_FRAMES  24
 
 #endif // CUDABIRD_CONFIG_H
