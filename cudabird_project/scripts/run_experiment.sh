@@ -4,20 +4,26 @@
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
 
-# Move to the project root directory
-cd "$(dirname "$0")/.." || exit
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD_DIR="${PROJECT_ROOT}/build"
+
+cd "${PROJECT_ROOT}" || exit 1
 
 echo "********************************"
 echo "** Building CudaBird Project  **"
 echo "********************************"
 
-# Rebuild the project if the main executable does not exist
-if [ ! -f build/cudabird ]; then
-    mkdir -p build
-    cd build
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    cmake --build . -j $(nproc)
-    cd ..
+cmake -S "${PROJECT_ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
+cmake --build "${BUILD_DIR}" -j "$(nproc)"
+
+if [ "${RUN_SMOKE_TESTS:-0}" = "1" ]; then
+    echo ""
+    echo "********************************"
+    echo "** Running Smoke Tests        **"
+    echo "********************************"
+    ctest --test-dir "${BUILD_DIR}" --output-on-failure
 fi
 
 echo ""
@@ -25,9 +31,4 @@ echo "********************************"
 echo "** Running CudaBird Training  **"
 echo "********************************"
 
-# Run the main application
-./build/cudabird "$@"
-
-# ./build/test_game
-# ./build/test_network
-# ./build/test_evolution
+"${BUILD_DIR}/cudabird" "$@"
