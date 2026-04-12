@@ -20,4 +20,9 @@ struct GameState {
     PipeState pipes[MAX_PIPES];
 };
 
+struct ReplayFrame {
+    GameState game_state;
+    float flap_probability;
+};
+
 #endif // CUDABIRD_GAME_STATE_H

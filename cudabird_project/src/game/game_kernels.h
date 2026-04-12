@@ -12,5 +12,11 @@ void simulate_generation(GameState* d_games,
                          curandState* d_rng_states,
                          int population_size,
                          int max_ticks);
+void capture_replay_frames(const GameState& initial_game_state,
+                           const curandState& initial_rng_state,
+                           const NetworkWeights& network,
+                           int max_ticks,
+                           ReplayFrame* h_frames,
+                           int* h_frame_count);
 
 #endif // CUDABIRD_GAME_KERNELS_H

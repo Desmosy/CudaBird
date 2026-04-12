@@ -156,6 +156,63 @@ __global__ void simulate_generation_kernel(GameState* games,
     rng_states[idx] = local_rng;
 }
 
+__global__ void capture_replay_frames_kernel(ReplayFrame* frames,
+                                             int* frame_count,
+                                             GameState initial_game_state,
+                                             curandState initial_rng_state,
+                                             NetworkWeights network,
+                                             int max_ticks) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) {
+        return;
+    }
+
+    GameState game_state = initial_game_state;
+    curandState local_rng = initial_rng_state;
+    float flap_probability = 0.0f;
+    int recorded_frames = 0;
+
+    frames[recorded_frames].game_state = game_state;
+    frames[recorded_frames].flap_probability = flap_probability;
+    recorded_frames += 1;
+
+    for (int tick = 0; tick < max_ticks && game_state.alive; ++tick) {
+        game_state.next_pipe_index = find_next_pipe_index(game_state);
+        const PipeState& next_pipe = game_state.pipes[game_state.next_pipe_index];
+
+        float inputs[INPUT_SIZE];
+        inputs[0] = (game_state.bird_y / GAME_HEIGHT) * 2.0f - 1.0f;
+        inputs[1] = game_state.bird_velocity / 10.0f;
+        inputs[2] = ((next_pipe.x - BIRD_X) / GAME_WIDTH) * 2.0f - 1.0f;
+        inputs[3] = (next_pipe.gap_center_y / GAME_HEIGHT) * 2.0f - 1.0f;
+
+        flap_probability = run_network(network, inputs);
+        if (flap_probability > FLAP_THRESHOLD) {
+            game_state.bird_velocity = FLAP_STRENGTH;
+        }
+
+        game_state.bird_velocity += GRAVITY;
+        game_state.bird_y += game_state.bird_velocity;
+        advance_pipes(&game_state, &local_rng);
+
+        game_state.ticks_alive += 1;
+        game_state.fitness = static_cast<float>(game_state.ticks_alive) +
+                             static_cast<float>(game_state.score) * 250.0f;
+
+        const int out_of_bounds =
+            (game_state.bird_y - BIRD_RADIUS) < 0.0f ||
+            (game_state.bird_y + BIRD_RADIUS) > GAME_HEIGHT;
+        if (out_of_bounds || collides_with_pipe(game_state)) {
+            game_state.alive = 0;
+        }
+
+        frames[recorded_frames].game_state = game_state;
+        frames[recorded_frames].flap_probability = flap_probability;
+        recorded_frames += 1;
+    }
+
+    *frame_count = recorded_frames;
+}
+
 } // namespace
 
 void reset_games(GameState* d_games, curandState* d_rng_states, int population_size) {
@@ -178,4 +235,40 @@ void simulate_generation(GameState* d_games,
                                                           max_ticks);
     CUDA_KERNEL_CHECK();
     CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+void capture_replay_frames(const GameState& initial_game_state,
+                           const curandState& initial_rng_state,
+                           const NetworkWeights& network,
+                           int max_ticks,
+                           ReplayFrame* h_frames,
+                           int* h_frame_count) {
+    ReplayFrame* d_frames = nullptr;
+    int* d_frame_count = nullptr;
+    const size_t frame_capacity = static_cast<size_t>(max_ticks + 1);
+
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_frames),
+                          sizeof(ReplayFrame) * frame_capacity));
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_frame_count), sizeof(int)));
+
+    capture_replay_frames_kernel<<<1, 1>>>(d_frames,
+                                           d_frame_count,
+                                           initial_game_state,
+                                           initial_rng_state,
+                                           network,
+                                           max_ticks);
+    CUDA_KERNEL_CHECK();
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    CUDA_CHECK(cudaMemcpy(h_frame_count,
+                          d_frame_count,
+                          sizeof(int),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_frames,
+                          d_frames,
+                          sizeof(ReplayFrame) * static_cast<size_t>(*h_frame_count),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_CHECK(cudaFree(d_frame_count));
+    CUDA_CHECK(cudaFree(d_frames));
 }

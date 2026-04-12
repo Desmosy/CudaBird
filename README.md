@@ -13,6 +13,7 @@ The project now has a runnable end-to-end training slice:
 - Mutated offspring are generated directly on the GPU.
 - Training metrics are logged each generation.
 - The current best network is checkpointed to disk.
+- The final champion of a run is exported as a replay video of the evaluated winner episode.
 
 ## What Has Been Accomplished
 
@@ -53,6 +54,7 @@ The project now has a runnable end-to-end training slice:
 - Added console generation summaries during training.
 - Added `training_log.csv` output.
 - Added checkpoint files for the current best network under `cudabird_project/outputs/`.
+- Added OpenCV-based replay export for the actual winning bird episode as `.avi` video.
 
 ## Verified Working
 
@@ -89,7 +91,6 @@ Best run: generation 1, fitness 1182.00, score 3
 
 ### High-priority next steps
 
-- Add a real visual replay or renderer for the best bird.
 - Add checkpoint loading so training can resume from saved runs.
 - Persist full experiment metadata, not just best-network weights.
 - Track best-so-far performance across longer runs more clearly.
@@ -123,11 +124,5 @@ After a run you should expect artifacts like:
 - `cudabird_project/training_log.csv`
 - `cudabird_project/outputs/best_network_latest.txt`
 - `cudabird_project/outputs/best_network_gen_XXXX.txt`
-
-## Current Branch
-
-Implementation work is currently on:
-
-```text
-feat/gpu-training-foundation
-```
+- `cudabird_project/outputs/best_replay_latest.avi`
+- `cudabird_project/outputs/best_replay_gen_XXXX.avi`
