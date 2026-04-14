@@ -131,3 +131,4 @@ Implementation work is currently on:
 ```text
 feat/gpu-training-foundation
 ```
+\n## Visualization\n\nYou can visualize the trained model right in your browser! Open `cudabird_project/visualizer.html` in Chrome or Firefox, click **Load Network**, and select the `best_network_latest.txt` file from your `outputs/` directory. You will see both the exact game state simulation and the neural network activation logic animating in real-time.

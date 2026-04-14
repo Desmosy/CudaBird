@@ -61,6 +61,11 @@ add_executable(cudabird src/main.cu)
 target_link_libraries(cudabird PRIVATE cudabird_core)
 set_target_properties(cudabird PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
+add_executable(cudabird_cpu src/main_cpu.cpp)
+target_link_libraries(cudabird_cpu PRIVATE cudabird_core)
+# Since network.h requires cuda_runtime, link cudart explicitly just in case.
+
+
 enable_testing()
 
 foreach(test_name IN ITEMS test_game test_network test_evolution)
