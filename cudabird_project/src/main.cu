@@ -153,6 +153,11 @@ int main(int argc, char** argv) {
     NetworkWeights best_network = {};
     best_run.best_fitness = -1.0f;
 
+    cudaEvent_t start_event, stop_event;
+    CUDA_CHECK(cudaEventCreate(&start_event));
+    CUDA_CHECK(cudaEventCreate(&stop_event));
+    CUDA_CHECK(cudaEventRecord(start_event));
+
     for (int generation = 0; generation < options.generations; ++generation) {
         reset_games(d_games, d_rng_states, options.population_size);
         simulate_generation(d_games,
@@ -194,6 +199,22 @@ int main(int argc, char** argv) {
             std::swap(d_population, d_next_population);
         }
     }
+
+    CUDA_CHECK(cudaEventRecord(stop_event));
+    CUDA_CHECK(cudaEventSynchronize(stop_event));
+
+    float milliseconds = 0;
+    CUDA_CHECK(cudaEventElapsedTime(&milliseconds, start_event, stop_event));
+    double duration = milliseconds / 1000.0;
+
+    printf("\n=== GPU PERFORMANCE REPORT ===\n");
+    printf("Total Execution Time: %.2f seconds\n", duration);
+    printf("Time per Generation: %.4f seconds\n", duration / options.generations);
+    printf("Speed: %.2f games/sec\n", (options.population_size * options.generations) / duration);
+    printf("==============================\n\n");
+
+    CUDA_CHECK(cudaEventDestroy(start_event));
+    CUDA_CHECK(cudaEventDestroy(stop_event));
 
     printf("Best run: generation %d, fitness %.2f, score %d\n",
            best_run.generation,
